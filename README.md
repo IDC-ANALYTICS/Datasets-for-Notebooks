@@ -148,8 +148,8 @@ Interpretación de la secuencia de proyectos:
 
 Si necesitas... usa esta ruta:
 
-- Entender variables de proceso: ir a `PREPROCESING - ROTORKIT/Variables_proceso.csv`.
-- Cargar datasets limpios iniciales: ir a `UNDERSTANDING - DESFIBRADORA Y PICADORA/`.
+- Iniciar el análisis desde datos crudos (fase Understanding): ir a `UNDERSTANDING - DESFIBRADORA Y PICADORA/`.
+- Dejar la data lista para analizar (fase Preprocesing): ir a `PREPROCESING - ROTORKIT/Variables_proceso.csv`.
 - Revisar datos listos para modelado por caso: ir a `PROYECTO INTEGRADOR UTP/<Proyecto>/DATA/`.
 - Consultar objetivos, alcance y entregables: ir a `PROYECTO INTEGRADOR UTP/<Proyecto>/DOCUMENTATION/`.
 
@@ -160,21 +160,9 @@ Convención útil para orientarte:
 - Archivos `Proyecto * - Ficha.pdf`: resumen ejecutivo/técnico del caso.
 - Archivos `Entrega_Dataset_Proyecto*`: descripción formal del dataset y su entrega.
 
-## 6. Requisitos previos recomendados
+## 6. Cómo usar los recursos de forma práctica
 
-Para aprovechar el repositorio sin fricción, se recomienda:
-
-- Fundamentos de estadística descriptiva e inferencial.
-- Conocimientos básicos de machine learning supervisado y no supervisado.
-- Manejo de datos tabulares (CSV/XLSX).
-- Familiaridad con al menos una herramienta de análisis:
-  - Python (pandas, numpy, scikit-learn).
-  - Jupyter Notebook.
-  - Herramientas BI (Power BI, Tableau) o Excel avanzado.
-
-## 7. Cómo usar los recursos de forma práctica
-
-### 7.1 Datasets CSV
+### 6.1 Datasets CSV
 
 Uso recomendado:
 
@@ -192,7 +180,7 @@ print(df.head())
 print(df.info())
 ```
 
-### 7.2 Archivos XLSX de pesos ponderados
+### 6.2 Archivos XLSX de pesos ponderados
 
 Uso recomendado:
 
@@ -200,7 +188,7 @@ Uso recomendado:
 - Validar cómo se priorizan variables o indicadores por proyecto.
 - Reproducir cálculos en Python o Excel antes de comparar resultados.
 
-### 7.3 Documentación PDF/DOCX
+### 6.3 Documentación PDF/DOCX
 
 Uso recomendado:
 
