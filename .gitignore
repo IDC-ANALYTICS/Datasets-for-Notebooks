@@ -10,3 +10,19 @@
 ~$*.doc
 ~$*.docx
 ~$*.docm
+
+# Python temporary files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Compressed files
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.bz2
+*.xz
+*.7z
+*.rar
