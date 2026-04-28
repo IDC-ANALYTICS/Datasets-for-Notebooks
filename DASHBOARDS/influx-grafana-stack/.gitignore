@@ -1,0 +1,17 @@
+# Credenciales reales — nunca subir al repositorio
+.env
+
+# Datos de volúmenes Docker
+influxdb-data/
+grafana-data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db

@@ -151,6 +151,17 @@ def auto_detect_columns(chunk: pd.DataFrame, time_col: str, tag_cols: list, fiel
     return detected_tags, detected_fields
 
 
+def sanitize_column_name(name: str) -> str:
+    """Reemplaza espacios y caracteres especiales en nombres de columnas."""
+    # Reemplaza espacios con guiones bajos
+    name = name.replace(" ", "_")
+    # Reemplaza otros caracteres problemáticos
+    name = name.replace("-", "_")
+    name = name.replace(".", "_")
+    name = name.replace("+", "plus")
+    return name
+
+
 def chunk_to_line_protocol(chunk: pd.DataFrame,
                             measurement: str,
                             tag_cols: list,
@@ -160,53 +171,61 @@ def chunk_to_line_protocol(chunk: pd.DataFrame,
     """Convierte un DataFrame chunk a lista de puntos en line protocol."""
     records = []
 
-    for _, row in chunk.iterrows():
-        # Timestamp
-        if time_col and time_col in row.index and pd.notna(row[time_col]):
-            try:
-                ts = pd.to_datetime(row[time_col], format=time_format if time_format else None)
-                ts_ns = int(ts.value)  # nanosegundos desde epoch
-            except Exception:
-                ts_ns = None
-        else:
-            ts_ns = None
-
-        # Tags
-        tags = {}
-        for tc in tag_cols:
-            if tc in row.index and pd.notna(row[tc]):
-                tags[tc] = str(row[tc]).replace(" ", "\\ ").replace(",", "\\,").replace("=", "\\=")
-
-        # Fields
-        fields = {}
-        for fc in field_cols:
-            if fc in row.index and pd.notna(row[fc]):
-                val = row[fc]
+    for row_idx, (_, row) in enumerate(chunk.iterrows()):
+        try:
+            # Timestamp
+            if time_col and time_col in row.index and pd.notna(row[time_col]):
                 try:
-                    fields[fc] = float(val)
-                except (ValueError, TypeError):
-                    fields[fc] = f'"{str(val)}"'
+                    ts = pd.to_datetime(row[time_col], format=time_format if time_format else None)
+                    ts_ns = int(ts.value)  # nanosegundos desde epoch
+                except Exception as te:
+                    ts_ns = None
+            else:
+                ts_ns = None
 
-        if not fields:
-            continue  # omitir filas sin fields validos
+            # Tags (con nombres sanitizados)
+            tags = {}
+            for tc in tag_cols:
+                if tc in row.index and pd.notna(row[tc]):
+                    sanitized_name = sanitize_column_name(tc)
+                    tags[sanitized_name] = str(row[tc]).replace(" ", "\\ ").replace(",", "\\,").replace("=", "\\=")
 
-        # Construir line protocol
-        tag_str = ""
-        if tags:
-            tag_str = "," + ",".join(f"{k}={v}" for k, v in tags.items())
+            # Fields (con nombres sanitizados)
+            fields = {}
+            for fc in field_cols:
+                if fc in row.index and pd.notna(row[fc]):
+                    val = row[fc]
+                    sanitized_name = sanitize_column_name(fc)
+                    try:
+                        fields[sanitized_name] = float(val)
+                    except (ValueError, TypeError):
+                        # Si no es numerico, guardar como string entrecomillado
+                        fields[sanitized_name] = f'"{str(val)}"'
 
-        field_str = ",".join(
-            f"{k}={v}i" if isinstance(v, int) else
-            f"{k}={v}" if isinstance(v, float) else
-            f"{k}={v}"
-            for k, v in fields.items()
-        )
+            if not fields:
+                continue  # omitir filas sin fields validos
 
-        line = f"{measurement}{tag_str} {field_str}"
-        if ts_ns is not None:
-            line += f" {ts_ns}"
+            # Construir line protocol
+            tag_str = ""
+            if tags:
+                tag_str = "," + ",".join(f"{k}={v}" for k, v in tags.items())
 
-        records.append(line)
+            field_str = ",".join(
+                f"{k}={v}i" if isinstance(v, int) else
+                f"{k}={v}" if isinstance(v, float) else
+                f"{k}={v}"
+                for k, v in fields.items()
+            )
+
+            line = f"{measurement}{tag_str} {field_str}"
+            if ts_ns is not None:
+                line += f" {ts_ns}"
+
+            records.append(line)
+        except Exception as row_err:
+            # Si falla una fila, loguear pero continuar
+            tqdm.write(f"{YELLOW}  Advertencia: Fila {row_idx} omitida por error: {row_err}{RESET}")
+            continue
 
     return records
 
@@ -251,7 +270,7 @@ def upload_csv(filepath: str, config: dict):
     # ── Conexion a InfluxDB ──
     print(f"\n{CYAN}Conectando a InfluxDB...{RESET}")
     try:
-        client = InfluxDBClient(url=url, token=token, org=org)
+        client = InfluxDBClient(url=url, token=token, org=org, timeout=30000)  # 30s timeout
         health = client.health()
         if health.status != "pass":
             raise ConnectionError(f"InfluxDB no responde correctamente: {health.status}")
@@ -263,10 +282,23 @@ def upload_csv(filepath: str, config: dict):
 
     write_api = client.write_api(write_options=SYNCHRONOUS)
 
+    # ── Validar bucket y escribir datos de prueba ──
+    print(f"\n{CYAN}Validando bucket '{bucket}'...{RESET}")
+    try:
+        query_api = client.query_api()
+        # Intentar una query simple para validar que el bucket existe y es accesible
+        result = query_api.query(f'from(bucket:"{bucket}") |> range(start: -1h) |> limit(n:1)')
+        print(f"{GREEN}✓ Bucket accesible{RESET}")
+    except Exception as be:
+        print(f"{YELLOW}Advertencia: No se pudo validar el bucket: {be}{RESET}")
+        print(f"El script intentará continuar de todas formas...")
+
     # ── Carga por chunks ──
     total_rows   = 0
     total_errors = 0
+    skipped_rows = 0
     start_time   = time.time()
+    first_chunk_sample = True  # Para mostrar muestra de line protocol
 
     reader = pd.read_csv(
         filepath,
@@ -288,26 +320,91 @@ def upload_csv(filepath: str, config: dict):
                     print(f"\n  Tags  detectados : {tag_cols}")
                     print(f"  Fields detectados: {field_cols}\n")
 
-            try:
-                lines = chunk_to_line_protocol(
-                    chunk, measurement, tag_cols, field_cols, time_col, time_format
-                )
-                if lines:
-                    write_api.write(bucket=bucket, org=org, record=lines,
-                                    write_precision="ns")
-                total_rows += len(chunk)
-                pbar.update(len(chunk))
+            # Intentar escribir el chunk con reintentos
+            max_retries = 3
+            retry_count = 0
+            chunk_written = False
 
-            except Exception as e:
-                total_errors += 1
-                tqdm.write(f"{RED}  Error en chunk {chunk_idx + 1}: {e}{RESET}")
-                if total_errors >= 5:
-                    tqdm.write(f"{RED}  Demasiados errores consecutivos. Abortando.{RESET}")
-                    break
+            while retry_count < max_retries and not chunk_written:
+                try:
+                    lines = chunk_to_line_protocol(
+                        chunk, measurement, tag_cols, field_cols, time_col, time_format
+                    )
+                    
+                    # Mostrar muestra de line protocol en el primer chunk exitoso
+                    if first_chunk_sample and lines:
+                        first_chunk_sample = False
+                        sample_lines = lines[:3]  # mostrar primeras 3 lineas
+                        tqdm.write(f"\n{CYAN}Muestra del formato enviado a InfluxDB:{RESET}")
+                        for sample in sample_lines:
+                            tqdm.write(f"  {sample[:120]}{'...' if len(sample) > 120 else ''}")
+                        tqdm.write("")
+                    
+                    if lines:
+                        # Escribir en lotes más pequeños para evitar que InfluxDB se ahogue
+                        batch_size = 1000  # 1000 líneas por lote
+                        for batch_idx in range(0, len(lines), batch_size):
+                            batch = lines[batch_idx:batch_idx + batch_size]
+                            write_api.write(bucket=bucket, org=org, record=batch,
+                                            write_precision="ns")
+                        chunk_written = True
+                        total_rows += len(chunk)
+                        pbar.update(len(chunk))
+                    else:
+                        tqdm.write(f"{YELLOW}  Chunk {chunk_idx + 1}: sin filas validas (todas omitidas){RESET}")
+                        total_rows += len(chunk)
+                        pbar.update(len(chunk))
+                        chunk_written = True
+
+                except Exception as e:
+                    retry_count += 1
+                    error_msg = str(e)
+                    
+                    # Detectar error de conexión abortada
+                    if "10053" in error_msg or "Connection aborted" in error_msg:
+                        tqdm.write(f"{RED}\n  ⚠ Conexión abortada por InfluxDB (error 10053){RESET}")
+                        tqdm.write(f"{YELLOW}    Posibles causas:{RESET}")
+                        tqdm.write(f"    • InfluxDB se quedó sin memoria procesando el chunk")
+                        tqdm.write(f"    • Timeout de conexión agotado")
+                        tqdm.write(f"    • El servidor InfluxDB se reinició")
+                        if retry_count < max_retries:
+                            wait_time = 3 * retry_count  # esperas más largas para reconectar
+                            tqdm.write(f"    Esperando {wait_time}s y reintentando ({retry_count}/{max_retries})...\n")
+                            time.sleep(wait_time)
+                        else:
+                            tqdm.write(f"    Abortando después de {max_retries} intentos\n")
+                            total_errors += 1
+                            chunk_written = True
+                    
+                    # Detectar error 400 (Bad Request)
+                    elif "400" in error_msg or "Bad Request" in error_msg:
+                        tqdm.write(f"{RED}\n  ⚠ HTTP 400 - Bad Request{RESET}")
+                        tqdm.write(f"{YELLOW}    Posibles causas:{RESET}")
+                        tqdm.write(f"    1. Token o credenciales incorrectas en config.yml")
+                        tqdm.write(f"    2. Bucket '{bucket}' no existe o el token no tiene permisos")
+                        tqdm.write(f"    3. Formato de datos inválido en el CSV")
+                        if retry_count < max_retries:
+                            tqdm.write(f"    Reintentando ({retry_count}/{max_retries})...\n")
+                            time.sleep(2)
+                        else:
+                            tqdm.write(f"    Abortando después de {max_retries} intentos\n")
+                            total_errors += 1
+                            chunk_written = True
+                    else:
+                        if retry_count < max_retries:
+                            wait_time = 2 ** (retry_count - 1)  # backoff exponencial
+                            tqdm.write(f"{YELLOW}  Chunk {chunk_idx + 1} - Reintentando ({retry_count}/{max_retries}) en {wait_time}s: {error_msg[:80]}{RESET}")
+                            time.sleep(wait_time)
+                        else:
+                            total_errors += 1
+                            tqdm.write(f"{RED}  ERROR en chunk {chunk_idx + 1} (intentos agotados): {error_msg[:100]}{RESET}")
+                            chunk_written = True
 
     # ── Resumen final ──
     elapsed = time.time() - start_time
     client.close()
+
+    speed = total_rows / elapsed if elapsed > 0 else 0
 
     print(f"""
 {GREEN}{BOLD}═══════════════════════════════════════
@@ -316,7 +413,7 @@ def upload_csv(filepath: str, config: dict):
   Filas procesadas : {total_rows:,}
   Errores de chunk : {total_errors}
   Tiempo total     : {elapsed:.1f} segundos
-  Velocidad media  : {total_rows / elapsed:,.0f} filas/seg
+  Velocidad media  : {speed:,.0f} filas/seg
 
 {CYAN}Abre Grafana en: http://localhost:3000{RESET}
   Usuario: (el que pusiste en .env)
@@ -327,7 +424,16 @@ def upload_csv(filepath: str, config: dict):
 #  Punto de entrada
 # ──────────────────────────────────────────────
 if __name__ == "__main__":
-    banner()
-    config   = load_config("config.yml")
-    filepath = get_csv_path()
-    upload_csv(filepath, config)
+    try:
+        banner()
+        config   = load_config("config.yml")
+        filepath = get_csv_path()
+        upload_csv(filepath, config)
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Operacion cancelada por el usuario.{RESET}")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n{RED}ERROR FATAL: {e}{RESET}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
