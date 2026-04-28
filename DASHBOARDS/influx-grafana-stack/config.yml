@@ -1,0 +1,46 @@
+# =============================================================
+#  CONFIGURACION DE CARGA CSV -> InfluxDB
+#  Edita este archivo antes de subir tus CSVs
+# =============================================================
+
+# Conexion a InfluxDB
+# IMPORTANTE: estos valores deben coincidir exactamente con los del archivo .env
+influxdb:
+  url: http://localhost:8086
+  token: mi-token-super-secreto-cambiame-123456
+  org: miorganizacion
+  bucket: misdatos
+
+# Configuracion de lectura y carga del CSV
+csv:
+  # Nombre de la "tabla" en InfluxDB donde se guardan los datos
+  measurement: mis_datos
+
+  # Columna que tiene la fecha/hora de cada fila
+  # Dejar vacio ("") para usar la hora actual al momento de insertar
+  time_column: ""
+
+  # Formato del timestamp (si time_column esta definido)
+  # Ejemplos comunes:
+  #   "%Y-%m-%d %H:%M:%S"   ->  2024-01-15 14:30:00
+  #   "%d/%m/%Y %H:%M"      ->  15/01/2024 14:30
+  #   "%Y-%m-%dT%H:%M:%SZ"  ->  2024-01-15T14:30:00Z
+  time_format: "%Y-%m-%d %H:%M:%S"
+
+  # Columnas de TAGS: valores de texto / categorias (ej: ciudad, sensor_id, tipo)
+  # Dejar vacio [] para que el script las detecte automaticamente
+  tag_columns: []
+
+  # Columnas de FIELDS: valores numericos / mediciones (ej: temperatura, presion)
+  # Dejar vacio [] para usar todas las columnas restantes
+  field_columns: []
+
+  # Separador del CSV: "," para coma, ";" para punto y coma, "\t" para tabulador
+  separator: ","
+
+  # Encoding del archivo (prueba utf-8 primero; si falla, intenta latin-1 o cp1252)
+  encoding: "utf-8"
+
+  # Filas procesadas por lote (reduce este numero si tienes poca RAM)
+  # 50000 usa ~200MB de RAM por chunk con columnas numericas tipicas
+  chunk_size: 50000
