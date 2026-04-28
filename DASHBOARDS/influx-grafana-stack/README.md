@@ -375,17 +375,126 @@ from(bucket: "NombreDeTuBucket")
 
 ## Solución de problemas
 
-| Problema | Causa probable | Solución |
-|----------|---------------|----------|
+### Tabla de referencia rápida
+
+| Mensaje / síntoma | Causa probable | Solución |
+|-------------------|---------------|----------|
 | "Docker no encontrado" al correr setup.bat | Docker Desktop no está instalado o no está en PATH | Instala Docker Desktop y ábrelo antes de correr setup.bat |
-| Docker muestra un error de WSL al abrir | WSL (subsistema de Linux) está desactualizado | Abre PowerShell como administrador y ejecuta: `wsl --update`. Luego reinicia Docker Desktop |
+| Docker muestra error de WSL al abrir | WSL (subsistema de Linux) está desactualizado | Abre PowerShell como administrador y ejecuta: `wsl --update`. Luego reinicia Docker Desktop |
 | "Python no está instalado" | Python no está en PATH | Reinstala Python marcando "Add Python to PATH" |
-| Error de conexión en upload_csv.py | El token o la org/bucket no coinciden entre `.env` y `config.yml` | Verifica que ambos archivos tengan exactamente los mismos valores |
-| Caracteres raros en el CSV (`Ã©`, `Ã³`) | El archivo está en latin-1, no UTF-8 | Cambia `encoding: "latin-1"` en config.yml |
-| Error en el formato de fecha | `time_format` no coincide con las fechas del CSV | Abre el CSV y mira cómo se ve una fecha; ajusta el formato |
-| Grafana no muestra datos | El nombre del measurement no coincide | En tu query Flux, verifica que `r._measurement` tenga exactamente el mismo nombre que `measurement` en config.yml |
-| Servicio no enciende después de reiniciar Windows | Docker no arrancó automáticamente | Abre Docker Desktop, espera que diga "Engine running" y luego corre start.bat |
 | "No se pudieron iniciar los servicios" en setup.bat | Docker Desktop está cerrado | Abre Docker Desktop desde el menú Inicio y espera a que esté listo |
+| Servicio no enciende después de reiniciar Windows | Docker no arrancó automáticamente | Abre Docker Desktop, espera que diga "Engine running" y luego corre start.bat |
+| `config.yml tiene valores sin configurar` | El token, org o bucket todavía tiene el valor de ejemplo | Sigue el PASO 2 para obtener el token y editar `config.yml` |
+| `HTTP 401 Unauthorized` | Token incorrecto o expirado | Genera un nuevo All-Access Token en InfluxDB y actualiza `config.yml` y `.env` |
+| `HTTP 404 Not Found` | El bucket u organización no existen con ese nombre exacto | Verifica nombre exacto en InfluxDB → Load Data → Buckets |
+| `HTTP 400 Bad Request` | Formato de datos inválido enviado a InfluxDB | Verifica `time_format`, el separador y el encoding en `config.yml` |
+| `Connection refused` / `10061` | InfluxDB no está corriendo | Ejecuta `start.bat` y espera 30 segundos |
+| Caracteres raros en el CSV (`Ã©`, `Ã³`) | El archivo está en latin-1, no UTF-8 | Cambia `encoding: "latin-1"` en config.yml |
+| Error de timestamp / fecha no parseada | `time_format` no coincide con las fechas del CSV | Abre el CSV, copia un valor de fecha y ajusta el formato (ver tabla abajo) |
+| Grafana no muestra datos | El nombre del measurement no coincide | En tu query Flux verifica que `r._measurement` sea igual que `measurement` en config.yml |
+| Grafana no conecta a InfluxDB (datasource error) | Variables del `.env` no se cargaron al contenedor | Ejecuta `stop.bat` y luego `setup.bat` de nuevo |
+| InfluxDB pide configuración inicial aunque ya la hiciste | El volumen de datos se borró o el token en `.env` estaba vacío cuando se ejecutó `setup.bat` | Ejecuta `stop.bat`, edita `.env` con el token correcto, y ejecuta `setup.bat` de nuevo |
+| Los datos suben pero no aparecen en Grafana | Rango de tiempo del panel no cubre las fechas del CSV | Cambia el rango de tiempo en Grafana al período que tienen tus datos |
+
+---
+
+### Errores frecuentes en la configuración de los archivos YML
+
+Estos son los errores más comunes que ocurren por valores incorrectos en `config.yml` o `grafana/provisioning/datasources/influxdb.yml`. El script los detecta automáticamente, pero conviene entender por qué ocurren.
+
+---
+
+#### Error: token sigue siendo el valor de ejemplo
+
+**Síntoma:** el script muestra `config.yml tiene valores sin configurar` o `HTTP 401 Unauthorized`.
+
+**Qué revisar en `config.yml`:**
+```yaml
+influxdb:
+  token: TU_TOKEN_DE_INFLUXDB_AQUI   # ← esto debe reemplazarse
+```
+
+**Cómo resolverlo:**
+1. Abre http://localhost:8086 → Load Data → API Tokens
+2. Haz clic en el token existente (o genera uno con "All Access")
+3. Copia el valor completo y pégalo en `config.yml` y en `.env`
+
+> Si cambias el token en `.env` después de haber arrancado los servicios, ejecuta `stop.bat` y `setup.bat` de nuevo para que Grafana también se actualice.
+
+---
+
+#### Error: org o bucket no coinciden entre `.env` y `config.yml`
+
+**Síntoma:** `HTTP 404 Not Found` o el script dice que el bucket no es accesible.
+
+**Causa:** InfluxDB distingue entre `IDC Ingenieria` y `idc ingenieria` (mayúsculas, espacios y tildes importan). Si el valor en `config.yml` no es exactamente igual al creado durante la instalación, InfluxDB lo rechazará.
+
+**Cómo resolverlo:**
+1. Abre http://localhost:8086 → Load Data → Buckets: copia el nombre exacto del bucket
+2. Abre InfluxDB → ícono de persona (arriba izquierda) → About: copia el nombre exacto de la org
+3. Pega esos valores en `config.yml`:
+   ```yaml
+   influxdb:
+     org: IDC Ingenieria        # ← exactamente como aparece en InfluxDB
+     bucket: Rotorkit           # ← exactamente como aparece en InfluxDB
+   ```
+4. Verifica que `.env` tenga los mismos valores:
+   ```
+   INFLUXDB_ORG=IDC Ingenieria
+   INFLUXDB_BUCKET=Rotorkit
+   ```
+
+---
+
+#### Error: formato de fecha incorrecto (`time_format`)
+
+**Síntoma:** el script avisa `no se pudo parsear la fecha 'VALOR' con formato 'FORMATO'` o todos los puntos se insertan sin timestamp.
+
+**Causa:** el patrón en `time_format` no coincide con cómo está escrita la fecha en el CSV.
+
+**Cómo diagnosticarlo:** abre el CSV con el Bloc de notas y busca la primera fila de datos. Luego busca tu patrón en la tabla:
+
+| Si tu fecha se ve así | Usa este `time_format` |
+|-----------------------|------------------------|
+| `2024-01-15 14:30:00` | `"%Y-%m-%d %H:%M:%S"` |
+| `2024-01-15 14:30:00+00:00` | `"%Y-%m-%d %H:%M:%S%z"` |
+| `2024-01-15 14:30:00-05:00` | `"%Y-%m-%d %H:%M:%S%z"` |
+| `15/01/2024 14:30` | `"%d/%m/%Y %H:%M"` |
+| `15/01/2024 14:30:00` | `"%d/%m/%Y %H:%M:%S"` |
+| `2024-01-15T14:30:00Z` | `"%Y-%m-%dT%H:%M:%SZ"` |
+| `2024-01-15T14:30:00` | `"%Y-%m-%dT%H:%M:%S"` |
+| `01/15/2024 14:30` | `"%m/%d/%Y %H:%M"` |
+
+> Si tu fecha no aparece en la tabla, busca en Google el patrón `strftime` que corresponde a tu formato.
+
+---
+
+#### Error: Grafana no conecta a InfluxDB (datasource error rojo)
+
+**Síntoma:** al abrir Grafana en http://localhost:3000, el datasource InfluxDB aparece con un punto rojo o muestra "Data source connected, but no default bucket found".
+
+**Causa frecuente:** las variables `${INFLUXDB_TOKEN}`, `${INFLUXDB_ORG}`, `${INFLUXDB_BUCKET}` del archivo `grafana/provisioning/datasources/influxdb.yml` no se resolvieron correctamente — esto pasa cuando el contenedor se creó antes de que el `.env` tuviera los valores definitivos.
+
+**Cómo resolverlo:**
+1. Ejecuta `stop.bat`
+2. Verifica que `.env` tenga el token, org y bucket correctos
+3. Ejecuta `setup.bat` de nuevo (los contenedores se recrean y leen el `.env` actualizado)
+
+> No reemplaces `${INFLUXDB_ORG}` con el valor directamente en `influxdb.yml` — déjalo con el `${}` y que lo tome del `.env`.
+
+---
+
+#### Error: InfluxDB pide "Get Started" aunque ya lo configuraste antes
+
+**Síntoma:** al abrir http://localhost:8086 aparece el asistente de configuración inicial como si fuera la primera vez.
+
+**Causa:** el campo `INFLUXDB_TOKEN` en `.env` estaba vacío o con el valor de ejemplo (`TU_TOKEN_DE_INFLUXDB_AQUI`) cuando se ejecutó `setup.bat` por primera vez. InfluxDB requiere que el token inicial esté definido para completar la inicialización automática.
+
+**Cómo resolverlo:**
+1. Ejecuta `stop.bat`
+2. Abre `.env` y pon un token real (puede ser cualquier cadena larga, por ejemplo 32 caracteres aleatorios)
+3. Ejecuta `setup.bat` de nuevo
+4. Una vez dentro de InfluxDB, copia el token desde Load Data → API Tokens y actualiza `config.yml`
 
 ---
 

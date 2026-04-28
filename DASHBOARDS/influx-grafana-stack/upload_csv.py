@@ -56,6 +56,48 @@ def load_config(config_path: str = "config.yml") -> dict:
         return yaml.safe_load(f)
 
 
+def validate_config(config: dict):
+    """Detecta valores de placeholder que el usuario olvido cambiar."""
+    PLACEHOLDERS = {
+        "TU_TOKEN_DE_INFLUXDB_AQUI": (
+            "influxdb → token en config.yml",
+            "Copia el token desde InfluxDB (PASO 2) y pegalo en config.yml y en .env"
+        ),
+        "NombreDeTuOrganizacion": (
+            "influxdb → org en config.yml",
+            "Escribe el nombre exacto de tu organización (el mismo que usaste en .env)"
+        ),
+        "NombreDeTuBucket": (
+            "influxdb → bucket en config.yml",
+            "Escribe el nombre exacto de tu bucket (el mismo que usaste en .env)"
+        ),
+    }
+
+    errors_found = []
+    db = config.get("influxdb", {})
+    for field in ("token", "org", "bucket"):
+        val = str(db.get(field, "")).strip()
+        if val in PLACEHOLDERS:
+            label, hint = PLACEHOLDERS[val]
+            errors_found.append((label, hint))
+        elif not val:
+            errors_found.append((
+                f"influxdb → {field} en config.yml",
+                f"El campo '{field}' está vacío. Complétalo antes de continuar."
+            ))
+
+    if errors_found:
+        print(f"{RED}{'═'*55}")
+        print(f"  ERROR: config.yml tiene valores sin configurar")
+        print(f"{'═'*55}{RESET}")
+        for label, hint in errors_found:
+            print(f"{YELLOW}  • {label}")
+            print(f"    → {hint}{RESET}")
+        print(f"\n  Abre config.yml y corrige los campos indicados antes de continuar.")
+        print(f"  Consulta el README, sección PASO 1 y PASO 2, para más detalle.\n")
+        sys.exit(1)
+
+
 def get_csv_path() -> str:
     """Pide al usuario la ruta del archivo CSV si no se paso como argumento."""
     if len(sys.argv) > 1:
@@ -177,9 +219,15 @@ def chunk_to_line_protocol(chunk: pd.DataFrame,
             if time_col and time_col in row.index and pd.notna(row[time_col]):
                 try:
                     ts = pd.to_datetime(row[time_col], format=time_format if time_format else None)
-                    ts_ns = int(ts.value)  # nanosegundos desde epoch
+                    ts_ns = int(ts.value)
                 except Exception as te:
                     ts_ns = None
+                    if row_idx == 0:
+                        tqdm.write(
+                            f"{YELLOW}  Advertencia: no se pudo parsear la fecha '{row[time_col]}' "
+                            f"con formato '{time_format}'. "
+                            f"Ajusta time_format en config.yml para que coincida con ese valor.{RESET}"
+                        )
             else:
                 ts_ns = None
 
@@ -246,6 +294,9 @@ def upload_csv(filepath: str, config: dict):
     time_col    = cfg_csv.get("time_column", "").strip()
     time_format = cfg_csv.get("time_format", "")
 
+    # ── Validar que no queden placeholders sin reemplazar ──
+    validate_config(config)
+
     # ── Preview ──
     all_columns = preview_csv(filepath, sep, encoding)
     tag_cols, field_cols = resolve_columns(cfg_csv, all_columns)
@@ -270,28 +321,58 @@ def upload_csv(filepath: str, config: dict):
     # ── Conexion a InfluxDB ──
     print(f"\n{CYAN}Conectando a InfluxDB...{RESET}")
     try:
-        client = InfluxDBClient(url=url, token=token, org=org, timeout=30000)  # 30s timeout
+        client = InfluxDBClient(url=url, token=token, org=org, timeout=30000)
         health = client.health()
         if health.status != "pass":
             raise ConnectionError(f"InfluxDB no responde correctamente: {health.status}")
         print(f"{GREEN}✓ Conexion exitosa{RESET}")
     except Exception as e:
-        print(f"{RED}ERROR al conectar con InfluxDB: {e}")
-        print(f"Verifica que el servicio este corriendo (ejecuta start.bat) y que el token en config.yml sea correcto.{RESET}")
+        error_msg = str(e)
+        print(f"{RED}ERROR al conectar con InfluxDB:{RESET}")
+        if "Connection refused" in error_msg or "Failed to establish" in error_msg or "10061" in error_msg:
+            print(f"{YELLOW}  → El servicio InfluxDB no está corriendo.")
+            print(f"    Ejecuta start.bat y espera unos segundos antes de intentarlo de nuevo.{RESET}")
+        elif "401" in error_msg or "Unauthorized" in error_msg:
+            print(f"{YELLOW}  → Token incorrecto o expirado (HTTP 401 Unauthorized).")
+            print(f"    Verifica que el token en config.yml sea el mismo que copiaste de InfluxDB.")
+            print(f"    Si lo cambiaste en .env, ejecuta stop.bat y setup.bat para que Grafana se actualice.{RESET}")
+        elif "timed out" in error_msg or "timeout" in error_msg.lower():
+            print(f"{YELLOW}  → Timeout de conexión.")
+            print(f"    Docker puede estar iniciando todavía. Espera 30 segundos y reintenta.{RESET}")
+        else:
+            print(f"  {error_msg}")
+            print(f"{YELLOW}  → Verifica que Docker Desktop esté abierto y que hayas ejecutado start.bat.{RESET}")
         sys.exit(1)
 
     write_api = client.write_api(write_options=SYNCHRONOUS)
 
-    # ── Validar bucket y escribir datos de prueba ──
+    # ── Validar bucket ──
     print(f"\n{CYAN}Validando bucket '{bucket}'...{RESET}")
     try:
         query_api = client.query_api()
-        # Intentar una query simple para validar que el bucket existe y es accesible
-        result = query_api.query(f'from(bucket:"{bucket}") |> range(start: -1h) |> limit(n:1)')
+        query_api.query(f'from(bucket:"{bucket}") |> range(start: -1h) |> limit(n:1)')
         print(f"{GREEN}✓ Bucket accesible{RESET}")
     except Exception as be:
-        print(f"{YELLOW}Advertencia: No se pudo validar el bucket: {be}{RESET}")
-        print(f"El script intentará continuar de todas formas...")
+        be_msg = str(be)
+        if "404" in be_msg or "not found" in be_msg.lower() or "bucket" in be_msg.lower():
+            print(f"{RED}  ERROR: El bucket '{bucket}' no existe o no es accesible.{RESET}")
+            print(f"{YELLOW}  Causas frecuentes:")
+            print(f"    1. El nombre en config.yml → bucket no coincide con el creado en InfluxDB")
+            print(f"       (verifica mayúsculas/minúsculas y espacios)")
+            print(f"    2. La organización en config.yml → org es incorrecta")
+            print(f"    3. El token no tiene permiso de lectura/escritura sobre ese bucket")
+            print(f"  Solución: abre InfluxDB en http://localhost:8086 → Load Data → Buckets")
+            print(f"  y copia el nombre exacto del bucket.{RESET}")
+            client.close()
+            sys.exit(1)
+        elif "401" in be_msg or "Unauthorized" in be_msg:
+            print(f"{RED}  ERROR: Token inválido para acceder al bucket (HTTP 401).{RESET}")
+            print(f"{YELLOW}  Verifica que el token en config.yml sea el token All-Access de InfluxDB.{RESET}")
+            client.close()
+            sys.exit(1)
+        else:
+            print(f"{YELLOW}  Advertencia al validar bucket: {be_msg[:120]}")
+            print(f"  El script intentará continuar de todas formas...{RESET}")
 
     # ── Carga por chunks ──
     total_rows   = 0
@@ -376,13 +457,33 @@ def upload_csv(filepath: str, config: dict):
                             total_errors += 1
                             chunk_written = True
                     
+                    # Detectar error 401 (Unauthorized)
+                    elif "401" in error_msg or "Unauthorized" in error_msg:
+                        tqdm.write(f"{RED}\n  ⚠ HTTP 401 - Token inválido o sin permisos{RESET}")
+                        tqdm.write(f"{YELLOW}    Causas frecuentes:{RESET}")
+                        tqdm.write(f"    1. El token en config.yml no es el correcto")
+                        tqdm.write(f"    2. El token no tiene permisos de escritura sobre el bucket '{bucket}'")
+                        tqdm.write(f"    Solución: genera un All-Access Token en InfluxDB y actualiza config.yml\n")
+                        total_errors += 1
+                        chunk_written = True  # no tiene sentido reintentar con el mismo token
+
+                    # Detectar error 404 (Not Found)
+                    elif "404" in error_msg or "not found" in error_msg.lower():
+                        tqdm.write(f"{RED}\n  ⚠ HTTP 404 - Recurso no encontrado{RESET}")
+                        tqdm.write(f"{YELLOW}    Causas frecuentes:{RESET}")
+                        tqdm.write(f"    1. El bucket '{bucket}' no existe en InfluxDB")
+                        tqdm.write(f"    2. La organización '{org}' es incorrecta (revisa mayúsculas)")
+                        tqdm.write(f"    Solución: verifica nombre exacto de org y bucket en http://localhost:8086\n")
+                        total_errors += 1
+                        chunk_written = True
+
                     # Detectar error 400 (Bad Request)
                     elif "400" in error_msg or "Bad Request" in error_msg:
                         tqdm.write(f"{RED}\n  ⚠ HTTP 400 - Bad Request{RESET}")
                         tqdm.write(f"{YELLOW}    Posibles causas:{RESET}")
-                        tqdm.write(f"    1. Token o credenciales incorrectas en config.yml")
-                        tqdm.write(f"    2. Bucket '{bucket}' no existe o el token no tiene permisos")
-                        tqdm.write(f"    3. Formato de datos inválido en el CSV")
+                        tqdm.write(f"    1. Formato de datos inválido — revisa que time_format coincida con el CSV")
+                        tqdm.write(f"    2. Nombres de columnas con caracteres especiales no soportados")
+                        tqdm.write(f"    3. Todos los values de un campo son nulos en este chunk")
                         if retry_count < max_retries:
                             tqdm.write(f"    Reintentando ({retry_count}/{max_retries})...\n")
                             time.sleep(2)
