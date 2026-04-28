@@ -1,0 +1,57 @@
+# =============================================================
+#  CONFIGURACION DE CARGA CSV -> InfluxDB Cloud
+#  Edita este archivo con tus datos de InfluxDB Cloud
+# =============================================================
+
+# Conexion a InfluxDB Cloud
+# Consigue estos valores en: https://cloud2.influxdata.com
+#   → Cuenta → Organization → API Tokens
+influxdb:
+  # URL de tu organizacion en InfluxDB Cloud
+  # Ejemplos:
+  #   https://us-east-1-1.aws.cloud2.influxdata.com
+  #   https://eu-central-1-1.aws.cloud2.influxdata.com
+  url: https://TU-REGION.aws.cloud2.influxdata.com
+
+  # Token con permiso de escritura (Write)
+  token: PEGA-AQUI-TU-API-TOKEN
+
+  # Nombre de tu organizacion en InfluxDB Cloud
+  org: PEGA-AQUI-TU-EMAIL-O-NOMBRE-DE-ORG
+
+  # Nombre del bucket donde se guardan los datos
+  bucket: misdatos
+
+# Configuracion de lectura y carga del CSV
+csv:
+  # Nombre de la "tabla" en InfluxDB donde se guardan los datos
+  measurement: mis_datos
+
+  # Columna que tiene la fecha/hora de cada fila
+  # Dejar vacio ("") para usar la hora actual al momento de insertar
+  time_column: ""
+
+  # Formato del timestamp (si time_column esta definido)
+  # Ejemplos comunes:
+  #   "%Y-%m-%d %H:%M:%S"   ->  2024-01-15 14:30:00
+  #   "%d/%m/%Y %H:%M"      ->  15/01/2024 14:30
+  #   "%Y-%m-%dT%H:%M:%SZ"  ->  2024-01-15T14:30:00Z
+  time_format: "%Y-%m-%d %H:%M:%S"
+
+  # Columnas de TAGS: valores de texto / categorias (ej: ciudad, sensor_id, tipo)
+  # Dejar vacio [] para que el script las detecte automaticamente
+  tag_columns: []
+
+  # Columnas de FIELDS: valores numericos / mediciones (ej: temperatura, presion)
+  # Dejar vacio [] para usar todas las columnas que no sean tags ni timestamp
+  field_columns: []
+
+  # Separador del CSV: "," para coma, ";" para punto y coma, "\t" para tabulador
+  separator: ","
+
+  # Encoding del archivo (prueba utf-8 primero; si falla, intenta latin-1 o cp1252)
+  encoding: "utf-8"
+
+  # Filas procesadas por lote (reduce si tienes poca RAM o conexion lenta)
+  # Con conexion normal a internet, 10000-20000 es un buen balance velocidad/memoria
+  chunk_size: 20000
