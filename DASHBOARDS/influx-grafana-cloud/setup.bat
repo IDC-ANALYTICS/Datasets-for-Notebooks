@@ -3,12 +3,11 @@ chcp 65001 >nul
 title Instalacion - Cargador CSV a InfluxDB Cloud
 
 echo.
-echo ╔══════════════════════════════════════════════════╗
-echo ║   INSTALACION - Cargador CSV a InfluxDB Cloud   ║
-echo ╚══════════════════════════════════════════════════╝
+echo ====================================================
+echo    INSTALACION - Cargador CSV a InfluxDB Cloud
+echo ====================================================
 echo.
 
-:: ── Verificar Python ──────────────────────────────────
 echo [1/2] Verificando que Python este instalado...
 python --version >nul 2>&1
 IF %ERRORLEVEL% NEQ 0 (
@@ -25,7 +24,6 @@ IF %ERRORLEVEL% NEQ 0 (
 )
 echo  OK - Python encontrado.
 
-:: ── Instalar dependencias Python ──────────────────────
 echo.
 echo [2/2] Instalando librerias necesarias...
 pip install -r requirements.txt --quiet
@@ -40,16 +38,16 @@ IF %ERRORLEVEL% NEQ 0 (
 echo  OK - Librerias instaladas correctamente.
 
 echo.
-echo ╔══════════════════════════════════════════════════╗
-echo ║            INSTALACION EXITOSA                  ║
-echo ╠══════════════════════════════════════════════════╣
-echo ║                                                  ║
-echo ║  Siguiente paso:                                 ║
-echo ║    1. Edita config.yml con tus datos de          ║
-echo ║       InfluxDB Cloud (URL, token, org, bucket)   ║
-echo ║    2. Corre: python upload_csv.py archivo.csv    ║
-echo ║                                                  ║
-echo ║  Lee el README.md para la guia completa.         ║
-echo ╚══════════════════════════════════════════════════╝
+echo ====================================================
+echo             INSTALACION EXITOSA
+echo ====================================================
+echo.
+echo  Siguiente paso:
+echo    1. Edita config.yml con tus datos de
+echo       InfluxDB Cloud (URL, token, org, bucket)
+echo    2. Corre: python upload_csv.py archivo.csv
+echo.
+echo  Lee el README.md para la guia completa.
+echo ====================================================
 echo.
 pause
