@@ -71,23 +71,41 @@ IF %ERRORLEVEL% NEQ 0 (
 )
 echo         OK  Python listo.
 
-:: Instalar dependencias Python
+:: Crear entorno virtual
 echo.
-echo  [3/4]  Instalando librerias de Python...
-pip install -r requirements.txt --quiet
+echo  [3/4]  Preparando entorno virtual e instalando librerias...
+IF NOT EXIST ".venv\Scripts\python.exe" (
+    python -m venv .venv
+    IF %ERRORLEVEL% NEQ 0 (
+        echo.
+        echo +------------------------------------------------------+
+        echo ^|  ERROR  No se pudo crear el entorno virtual          ^|
+        echo +------------------------------------------------------^|
+        echo ^|  Asegurate de tener Python 3.8 o superior.           ^|
+        echo +------------------------------------------------------+
+        echo.
+        pause
+        exit /b 1
+    )
+    echo         OK  Entorno virtual creado en .venv
+) ELSE (
+    echo         OK  Entorno virtual existente reutilizado.
+)
+
+.venv\Scripts\pip install -r requirements.txt --quiet
 IF %ERRORLEVEL% NEQ 0 (
     echo.
     echo +------------------------------------------------------+
     echo ^|  ERROR  No se pudieron instalar las librerias        ^|
     echo +------------------------------------------------------^|
     echo ^|  Ejecuta manualmente:                                ^|
-    echo ^|    pip install -r requirements.txt                   ^|
+    echo ^|    .venv\Scripts\pip install -r requirements.txt     ^|
     echo +------------------------------------------------------+
     echo.
     pause
     exit /b 1
 )
-echo         OK  Librerias instaladas.
+echo         OK  Librerias instaladas en .venv
 
 :: Iniciar los servicios con Docker Compose
 echo.
@@ -123,7 +141,7 @@ echo    Credenciales: ver archivo .env
 echo.
 echo  --------------------------------------------------------------------
 echo.
-echo    Subir CSV:   python upload_csv.py ruta\archivo.csv
+echo    Subir CSV:   .venv\Scripts\python upload_csv.py ruta\archivo.csv
 echo    Apagar:      ejecuta stop.bat
 echo.
 echo  ====================================================================

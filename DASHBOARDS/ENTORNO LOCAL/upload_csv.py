@@ -37,6 +37,30 @@ except ImportError:
     GREEN = YELLOW = RED = CYAN = BOLD = RESET = ""
 
 
+def log_message(message: str, level: str = "info", use_tqdm: bool = True):
+    """Imprime mensajes con prefijo y color, evitando mezclar salida con la barra de progreso."""
+    level = level.lower().strip()
+    prefixes = {
+        "info": "INFO",
+        "ok": "OK",
+        "warn": "AVISO",
+        "error": "ERROR",
+    }
+    colors = {
+        "info": CYAN,
+        "ok": GREEN,
+        "warn": YELLOW,
+        "error": RED,
+    }
+    prefix = prefixes.get(level, "INFO")
+    color = colors.get(level, CYAN)
+    text = f"{color}[{prefix}] {message}{RESET}"
+    if use_tqdm:
+        tqdm.write(text)
+    else:
+        print(text)
+
+
 def banner():
     print(f"""
 {CYAN}{BOLD}╔══════════════════════════════════════════════╗
@@ -49,8 +73,8 @@ def banner():
 def load_config(config_path: str = "config.yml") -> dict:
     """Carga la configuracion desde config.yml."""
     if not os.path.exists(config_path):
-        print(f"{RED}ERROR: No se encontro el archivo '{config_path}'.")
-        print(f"Asegurate de ejecutar este script desde la carpeta del proyecto.{RESET}")
+        log_message(f"No se encontro el archivo '{config_path}'.", "error", use_tqdm=False)
+        log_message("Ejecuta este script desde la carpeta del proyecto.", "warn", use_tqdm=False)
         sys.exit(1)
     with open(config_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -110,7 +134,7 @@ def get_csv_path() -> str:
     print(f"{YELLOW}Arrastra y suelta el archivo CSV aqui, o escribe la ruta completa:{RESET}")
     path = input("  Ruta del CSV: ").strip().strip('"').strip("'")
     if not os.path.exists(path):
-        print(f"{RED}ERROR: No se encontro el archivo: {path}{RESET}")
+        log_message(f"No se encontro el archivo: {path}", "error", use_tqdm=False)
         sys.exit(1)
     return path
 
@@ -140,15 +164,38 @@ def preview_csv(filepath: str, sep: str, encoding: str):
     """Muestra las primeras filas y el tipo de cada columna."""
     try:
         df = pd.read_csv(filepath, sep=sep, encoding=encoding, nrows=3)
-        print(f"\n{CYAN}Primeras filas del CSV:{RESET}")
+        print(f"\n{CYAN}Primeras filas del CSV (sep='{sep}', encoding='{encoding}'):{RESET}")
         print(df.to_string(index=False))
-        print(f"\n{CYAN}Columnas detectadas:{RESET}")
+        print(f"\n{CYAN}Columnas detectadas ({len(df.columns)}):{RESET}")
         for col in df.columns:
             dtype = df[col].dtype
             print(f"  • {col:<30} [{dtype}]")
+        if len(df.columns) == 1:
+            single_col = str(df.columns[0])
+            if "," in single_col and sep != ",":
+                log_message(
+                    f"Pandas solo detecto una columna y el encabezado contiene comas. El separador real probablemente es ',' en lugar de '{sep}'.",
+                    "warn",
+                    use_tqdm=False,
+                )
+            elif ";" in single_col and sep != ";":
+                log_message(
+                    f"Pandas solo detecto una columna y el encabezado contiene punto y coma. El separador real probablemente es ';' en lugar de '{sep}'.",
+                    "warn",
+                    use_tqdm=False,
+                )
         return list(df.columns)
     except Exception as e:
-        print(f"{RED}Error al leer el CSV: {e}{RESET}")
+        log_message(
+            f"No se pudo leer el CSV con sep='{sep}' y encoding='{encoding}': {e}",
+            "error",
+            use_tqdm=False,
+        )
+        log_message(
+            "Revisa el separador, el encoding y que la primera fila sea un encabezado válido.",
+            "warn",
+            use_tqdm=False,
+        )
         sys.exit(1)
 
 
@@ -188,7 +235,15 @@ def auto_detect_columns(chunk: pd.DataFrame, time_col: str, tag_cols: list, fiel
         if pd.api.types.is_numeric_dtype(chunk[col]):
             detected_fields.append(col)
         else:
-            detected_tags.append(col)
+            # Intentar coercionar a numérico (maneja números guardados como strings)
+            normalized = chunk[col].astype(str).str.replace(" ", "", regex=False)
+            normalized = normalized.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+            coerced = pd.to_numeric(normalized, errors='coerce')
+            non_null = chunk[col].notna().sum()
+            if non_null > 0 and coerced.notna().sum() / non_null >= 0.8:
+                detected_fields.append(col)
+            else:
+                detected_tags.append(col)
 
     return detected_tags, detected_fields
 
@@ -202,6 +257,66 @@ def sanitize_column_name(name: str) -> str:
     name = name.replace(".", "_")
     name = name.replace("+", "plus")
     return name
+
+
+def parse_timestamp_to_ns(value, time_format: str):
+    """Convierte un valor de fecha a nanosegundos Unix usando varios intentos."""
+    if pd.isna(value):
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    parsers = []
+    if time_format:
+        parsers.append(lambda: pd.to_datetime(text, format=time_format))
+    parsers.extend([
+        lambda: pd.to_datetime(text, utc=True, dayfirst=True),
+        lambda: pd.to_datetime(text, utc=False, dayfirst=False),
+    ])
+
+    for parser in parsers:
+        try:
+            ts = parser()
+            if pd.isna(ts):
+                continue
+            return int(pd.Timestamp(ts).value)
+        except Exception:
+            continue
+
+    return None
+
+
+def parse_field_value(value):
+    """Convierte valores de campo a numero o string compatible con line protocol."""
+    if pd.isna(value):
+        return None
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    normalized = text.replace(" ", "")
+    if "," in normalized and "." in normalized:
+        if normalized.rfind(",") > normalized.rfind("."):
+            normalized = normalized.replace(".", "").replace(",", ".")
+        else:
+            normalized = normalized.replace(",", "")
+    else:
+        normalized = normalized.replace(",", ".")
+
+    try:
+        return float(normalized)
+    except (ValueError, TypeError):
+        escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
 
 
 def chunk_to_line_protocol(chunk: pd.DataFrame,
@@ -218,15 +333,18 @@ def chunk_to_line_protocol(chunk: pd.DataFrame,
             # Timestamp
             if time_col and time_col in row.index and pd.notna(row[time_col]):
                 try:
-                    ts = pd.to_datetime(row[time_col], format=time_format if time_format else None)
-                    ts_ns = int(ts.value)
-                except Exception as te:
+                    ts_ns = parse_timestamp_to_ns(row[time_col], time_format)
+                    if ts_ns is None and row_idx == 0:
+                        log_message(
+                            f"No se pudo parsear la fecha '{row[time_col]}' en la columna '{time_col}'. Se enviara sin timestamp.",
+                            "warn",
+                        )
+                except Exception:
                     ts_ns = None
                     if row_idx == 0:
-                        tqdm.write(
-                            f"{YELLOW}  Advertencia: no se pudo parsear la fecha '{row[time_col]}' "
-                            f"con formato '{time_format}'. "
-                            f"Ajusta time_format en config.yml para que coincida con ese valor.{RESET}"
+                        log_message(
+                            f"No se pudo parsear la fecha '{row[time_col]}' en la columna '{time_col}' con time_format='{time_format}'.",
+                            "warn",
                         )
             else:
                 ts_ns = None
@@ -242,13 +360,11 @@ def chunk_to_line_protocol(chunk: pd.DataFrame,
             fields = {}
             for fc in field_cols:
                 if fc in row.index and pd.notna(row[fc]):
-                    val = row[fc]
+                    val = parse_field_value(row[fc])
+                    if val is None:
+                        continue
                     sanitized_name = sanitize_column_name(fc)
-                    try:
-                        fields[sanitized_name] = float(val)
-                    except (ValueError, TypeError):
-                        # Si no es numerico, guardar como string entrecomillado
-                        fields[sanitized_name] = f'"{str(val)}"'
+                    fields[sanitized_name] = val
 
             if not fields:
                 continue  # omitir filas sin fields validos
@@ -272,7 +388,10 @@ def chunk_to_line_protocol(chunk: pd.DataFrame,
             records.append(line)
         except Exception as row_err:
             # Si falla una fila, loguear pero continuar
-            tqdm.write(f"{YELLOW}  Advertencia: Fila {row_idx} omitida por error: {row_err}{RESET}")
+            log_message(
+                f"Fila {row_idx + 1} omitida por error: {row_err}. Revisa tipos de dato, columnas vacias o caracteres inesperados.",
+                "warn",
+            )
             continue
 
     return records
@@ -312,67 +431,62 @@ def upload_csv(filepath: str, config: dict):
     print(f"  Chunks de       : {chunk_size:,} filas")
     print(f"  InfluxDB bucket : {bucket}  |  measurement: {measurement}")
     print(f"  URL InfluxDB    : {url}\n")
+    log_message(
+        f"CSV detectado con time_column='{time_col}', separator='{sep}' y encoding='{encoding}'.",
+        "info",
+        use_tqdm=False,
+    )
 
     respuesta = input(f"{YELLOW}¿Comenzar la carga? (s/n): {RESET}").strip().lower()
     if respuesta not in ("s", "si", "sí", "y", "yes"):
-        print("Carga cancelada.")
+        log_message("Carga cancelada por el usuario.", "warn", use_tqdm=False)
         sys.exit(0)
 
     # ── Conexion a InfluxDB ──
-    print(f"\n{CYAN}Conectando a InfluxDB...{RESET}")
+    log_message("Conectando a InfluxDB...", "info", use_tqdm=False)
     try:
         client = InfluxDBClient(url=url, token=token, org=org, timeout=30000)
         health = client.health()
         if health.status != "pass":
             raise ConnectionError(f"InfluxDB no responde correctamente: {health.status}")
-        print(f"{GREEN}✓ Conexion exitosa{RESET}")
+        log_message("Conexion exitosa.", "ok", use_tqdm=False)
     except Exception as e:
         error_msg = str(e)
-        print(f"{RED}ERROR al conectar con InfluxDB:{RESET}")
+        log_message(f"No se pudo conectar con InfluxDB: {error_msg}", "error", use_tqdm=False)
         if "Connection refused" in error_msg or "Failed to establish" in error_msg or "10061" in error_msg:
-            print(f"{YELLOW}  → El servicio InfluxDB no está corriendo.")
-            print(f"    Ejecuta start.bat y espera unos segundos antes de intentarlo de nuevo.{RESET}")
+            log_message("El servicio InfluxDB no esta corriendo. Ejecuta start.bat y reintenta.", "warn", use_tqdm=False)
         elif "401" in error_msg or "Unauthorized" in error_msg:
-            print(f"{YELLOW}  → Token incorrecto o expirado (HTTP 401 Unauthorized).")
-            print(f"    Verifica que el token en config.yml sea el mismo que copiaste de InfluxDB.")
-            print(f"    Si lo cambiaste en .env, ejecuta stop.bat y setup.bat para que Grafana se actualice.{RESET}")
+            log_message("Token incorrecto o sin permisos (HTTP 401).", "warn", use_tqdm=False)
+            log_message("Verifica que el token en config.yml coincida con el de InfluxDB y tenga acceso al bucket.", "warn", use_tqdm=False)
         elif "timed out" in error_msg or "timeout" in error_msg.lower():
-            print(f"{YELLOW}  → Timeout de conexión.")
-            print(f"    Docker puede estar iniciando todavía. Espera 30 segundos y reintenta.{RESET}")
+            log_message("Timeout de conexion. Docker puede estar iniciando todavia.", "warn", use_tqdm=False)
         else:
-            print(f"  {error_msg}")
-            print(f"{YELLOW}  → Verifica que Docker Desktop esté abierto y que hayas ejecutado start.bat.{RESET}")
+            log_message("Verifica que Docker Desktop este abierto y que hayas ejecutado start.bat.", "warn", use_tqdm=False)
         sys.exit(1)
 
     write_api = client.write_api(write_options=SYNCHRONOUS)
 
     # ── Validar bucket ──
-    print(f"\n{CYAN}Validando bucket '{bucket}'...{RESET}")
+    log_message(f"Validando bucket '{bucket}'...", "info", use_tqdm=False)
     try:
         query_api = client.query_api()
         query_api.query(f'from(bucket:"{bucket}") |> range(start: -1h) |> limit(n:1)')
-        print(f"{GREEN}✓ Bucket accesible{RESET}")
+        log_message("Bucket accesible.", "ok", use_tqdm=False)
     except Exception as be:
         be_msg = str(be)
         if "404" in be_msg or "not found" in be_msg.lower() or "bucket" in be_msg.lower():
-            print(f"{RED}  ERROR: El bucket '{bucket}' no existe o no es accesible.{RESET}")
-            print(f"{YELLOW}  Causas frecuentes:")
-            print(f"    1. El nombre en config.yml → bucket no coincide con el creado en InfluxDB")
-            print(f"       (verifica mayúsculas/minúsculas y espacios)")
-            print(f"    2. La organización en config.yml → org es incorrecta")
-            print(f"    3. El token no tiene permiso de lectura/escritura sobre ese bucket")
-            print(f"  Solución: abre InfluxDB en http://localhost:8086 → Load Data → Buckets")
-            print(f"  y copia el nombre exacto del bucket.{RESET}")
+            log_message(f"El bucket '{bucket}' no existe o no es accesible.", "error", use_tqdm=False)
+            log_message("Revisa nombre exacto del bucket, organizacion y permisos del token.", "warn", use_tqdm=False)
             client.close()
             sys.exit(1)
         elif "401" in be_msg or "Unauthorized" in be_msg:
-            print(f"{RED}  ERROR: Token inválido para acceder al bucket (HTTP 401).{RESET}")
-            print(f"{YELLOW}  Verifica que el token en config.yml sea el token All-Access de InfluxDB.{RESET}")
+            log_message("Token invalido para acceder al bucket (HTTP 401).", "error", use_tqdm=False)
+            log_message("Verifica que el token sea un All-Access Token o tenga permisos sobre el bucket.", "warn", use_tqdm=False)
             client.close()
             sys.exit(1)
         else:
-            print(f"{YELLOW}  Advertencia al validar bucket: {be_msg[:120]}")
-            print(f"  El script intentará continuar de todas formas...{RESET}")
+            log_message(f"Advertencia al validar bucket: {be_msg[:120]}", "warn", use_tqdm=False)
+            log_message("El script intentara continuar de todas formas.", "warn", use_tqdm=False)
 
     # ── Carga por chunks ──
     total_rows   = 0
@@ -389,7 +503,7 @@ def upload_csv(filepath: str, config: dict):
         low_memory=False
     )
 
-    print(f"\n{CYAN}Iniciando carga...{RESET}")
+    log_message("Iniciando carga por chunks...", "info", use_tqdm=False)
     with tqdm(total=est_rows, unit="filas", unit_scale=True, colour="green",
               bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} filas  [{elapsed}<{remaining}]") as pbar:
 
@@ -398,8 +512,8 @@ def upload_csv(filepath: str, config: dict):
             if tag_cols is None or field_cols is None:
                 tag_cols, field_cols = auto_detect_columns(chunk, time_col, tag_cols, field_cols)
                 if chunk_idx == 0:
-                    print(f"\n  Tags  detectados : {tag_cols}")
-                    print(f"  Fields detectados: {field_cols}\n")
+                    log_message(f"Tags detectados: {tag_cols}", "info", use_tqdm=False)
+                    log_message(f"Fields detectados: {field_cols}", "info", use_tqdm=False)
 
             # Intentar escribir el chunk con reintentos
             max_retries = 3
@@ -416,10 +530,9 @@ def upload_csv(filepath: str, config: dict):
                     if first_chunk_sample and lines:
                         first_chunk_sample = False
                         sample_lines = lines[:3]  # mostrar primeras 3 lineas
-                        tqdm.write(f"\n{CYAN}Muestra del formato enviado a InfluxDB:{RESET}")
+                        log_message("Muestra del formato enviado a InfluxDB:", "info")
                         for sample in sample_lines:
-                            tqdm.write(f"  {sample[:120]}{'...' if len(sample) > 120 else ''}")
-                        tqdm.write("")
+                            log_message(f"  {sample[:120]}{'...' if len(sample) > 120 else ''}", "info")
                     
                     if lines:
                         # Escribir en lotes más pequeños para evitar que InfluxDB se ahogue
@@ -432,7 +545,14 @@ def upload_csv(filepath: str, config: dict):
                         total_rows += len(chunk)
                         pbar.update(len(chunk))
                     else:
-                        tqdm.write(f"{YELLOW}  Chunk {chunk_idx + 1}: sin filas validas (todas omitidas){RESET}")
+                        log_message(f"Chunk {chunk_idx + 1}: no genero filas validas. Todas las filas fueron omitidas.", "warn")
+                        if chunk_idx == 0:
+                            log_message(f"field_cols detectados: {field_cols}", "warn")
+                            log_message(f"tag_cols detectados: {tag_cols}", "warn")
+                            log_message(f"Columnas y tipos: { {c: str(chunk[c].dtype) for c in chunk.columns} }", "warn")
+                            if len(chunk) > 0:
+                                sample = dict(list(chunk.iloc[0].items())[:6])
+                                log_message(f"Primera fila (hasta 6 cols): {sample}", "warn")
                         total_rows += len(chunk)
                         pbar.update(len(chunk))
                         chunk_written = True
@@ -443,62 +563,53 @@ def upload_csv(filepath: str, config: dict):
                     
                     # Detectar error de conexión abortada
                     if "10053" in error_msg or "Connection aborted" in error_msg:
-                        tqdm.write(f"{RED}\n  ⚠ Conexión abortada por InfluxDB (error 10053){RESET}")
-                        tqdm.write(f"{YELLOW}    Posibles causas:{RESET}")
-                        tqdm.write(f"    • InfluxDB se quedó sin memoria procesando el chunk")
-                        tqdm.write(f"    • Timeout de conexión agotado")
-                        tqdm.write(f"    • El servidor InfluxDB se reinició")
+                        log_message("Conexion abortada por InfluxDB (10053).", "error")
+                        log_message("Posibles causas: memoria insuficiente, timeout agotado o reinicio del servidor.", "warn")
                         if retry_count < max_retries:
                             wait_time = 3 * retry_count  # esperas más largas para reconectar
-                            tqdm.write(f"    Esperando {wait_time}s y reintentando ({retry_count}/{max_retries})...\n")
+                            log_message(f"Esperando {wait_time}s y reintentando ({retry_count}/{max_retries})...", "warn")
                             time.sleep(wait_time)
                         else:
-                            tqdm.write(f"    Abortando después de {max_retries} intentos\n")
+                            log_message(f"Abortando despues de {max_retries} intentos.", "error")
                             total_errors += 1
                             chunk_written = True
                     
                     # Detectar error 401 (Unauthorized)
                     elif "401" in error_msg or "Unauthorized" in error_msg:
-                        tqdm.write(f"{RED}\n  ⚠ HTTP 401 - Token inválido o sin permisos{RESET}")
-                        tqdm.write(f"{YELLOW}    Causas frecuentes:{RESET}")
-                        tqdm.write(f"    1. El token en config.yml no es el correcto")
-                        tqdm.write(f"    2. El token no tiene permisos de escritura sobre el bucket '{bucket}'")
-                        tqdm.write(f"    Solución: genera un All-Access Token en InfluxDB y actualiza config.yml\n")
+                        log_message(f"HTTP 401 - Token invalido o sin permisos para el bucket '{bucket}'.", "error")
+                        log_message("Genera o copia un token con permisos de escritura y actualiza config.yml.", "warn")
                         total_errors += 1
                         chunk_written = True  # no tiene sentido reintentar con el mismo token
 
                     # Detectar error 404 (Not Found)
                     elif "404" in error_msg or "not found" in error_msg.lower():
-                        tqdm.write(f"{RED}\n  ⚠ HTTP 404 - Recurso no encontrado{RESET}")
-                        tqdm.write(f"{YELLOW}    Causas frecuentes:{RESET}")
-                        tqdm.write(f"    1. El bucket '{bucket}' no existe en InfluxDB")
-                        tqdm.write(f"    2. La organización '{org}' es incorrecta (revisa mayúsculas)")
-                        tqdm.write(f"    Solución: verifica nombre exacto de org y bucket en http://localhost:8086\n")
+                        log_message(f"HTTP 404 - Recurso no encontrado para bucket '{bucket}' o org '{org}'.", "error")
+                        log_message("Verifica el nombre exacto de org y bucket en InfluxDB.", "warn")
                         total_errors += 1
                         chunk_written = True
 
                     # Detectar error 400 (Bad Request)
                     elif "400" in error_msg or "Bad Request" in error_msg:
-                        tqdm.write(f"{RED}\n  ⚠ HTTP 400 - Bad Request{RESET}")
-                        tqdm.write(f"{YELLOW}    Posibles causas:{RESET}")
-                        tqdm.write(f"    1. Formato de datos inválido — revisa que time_format coincida con el CSV")
-                        tqdm.write(f"    2. Nombres de columnas con caracteres especiales no soportados")
-                        tqdm.write(f"    3. Todos los values de un campo son nulos en este chunk")
+                        log_message("HTTP 400 - Bad Request al escribir el chunk.", "error")
+                        log_message("Revisa time_format, nombres de columnas y campos nulos en el CSV.", "warn")
                         if retry_count < max_retries:
-                            tqdm.write(f"    Reintentando ({retry_count}/{max_retries})...\n")
+                            log_message(f"Reintentando ({retry_count}/{max_retries})...", "warn")
                             time.sleep(2)
                         else:
-                            tqdm.write(f"    Abortando después de {max_retries} intentos\n")
+                            log_message(f"Abortando despues de {max_retries} intentos.", "error")
                             total_errors += 1
                             chunk_written = True
                     else:
                         if retry_count < max_retries:
                             wait_time = 2 ** (retry_count - 1)  # backoff exponencial
-                            tqdm.write(f"{YELLOW}  Chunk {chunk_idx + 1} - Reintentando ({retry_count}/{max_retries}) en {wait_time}s: {error_msg[:80]}{RESET}")
+                            log_message(
+                                f"Chunk {chunk_idx + 1} reintentando ({retry_count}/{max_retries}) en {wait_time}s: {error_msg[:120]}",
+                                "warn",
+                            )
                             time.sleep(wait_time)
                         else:
                             total_errors += 1
-                            tqdm.write(f"{RED}  ERROR en chunk {chunk_idx + 1} (intentos agotados): {error_msg[:100]}{RESET}")
+                            log_message(f"Error en chunk {chunk_idx + 1} despues de agotar reintentos: {error_msg[:160]}", "error")
                             chunk_written = True
 
     # ── Resumen final ──
