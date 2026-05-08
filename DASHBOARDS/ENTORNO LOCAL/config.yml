@@ -7,18 +7,18 @@
 # IMPORTANTE: estos valores deben coincidir exactamente con los del archivo .env
 influxdb:
   url: http://localhost:8086
-  token: i3r1K7ozknmh0S7LC3DXVbR9zTLHXWHPn_TBs8d_DOMVkNdWWyVyp8HX0JaXTkw5ZqEMhYFbfGO9nihnD0TKFA==
-  org: IDC Ingenieria de Confiabilidad
-  bucket: Rotorkit
+  token: tutoken
+  org: tuORG
+  bucket: tuBucket
 
 # Configuracion de lectura y carga del CSV
 csv:
   # Nombre de la "tabla" en InfluxDB donde se guardan los datos
-  measurement: "Desfi"
+  measurement: "Nombre_tabla"
 
   # Columna que tiene la fecha/hora de cada fila
   # Dejar vacio ("") para usar la hora actual al momento de insertar
-  time_column: "timestamp"
+  time_column: "timestamp" #"Fecha" o "fecha" o "Date" o "datetime" o el nombre de tu columna de tiempo
 
   # Formato del timestamp (si time_column esta definido)
   # Ejemplos comunes:
@@ -36,7 +36,7 @@ csv:
   field_columns: []
 
   # Separador del CSV: "," para coma, ";" para punto y coma, "\t" para tabulador
-  separator: ","
+  separator: "," #";"
 
   # Encoding del archivo (prueba utf-8 primero; si falla, intenta latin-1 o cp1252)
   encoding: "utf-8"

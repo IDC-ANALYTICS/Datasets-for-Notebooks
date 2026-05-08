@@ -1,204 +1,115 @@
-# Diplomado en Analítica Aplicada al Sector Industrial
+﻿# Diplomado en Analitica Aplicada al Sector Industrial
 
-Repositorio académico que centraliza datasets, material documental y entregables de proyectos del diplomado. Este README funciona como punto de entrada único para comprender la estructura, el propósito de cada módulo y la forma recomendada de uso de los recursos.
+Repositorio academico para centralizar datasets, documentacion y entregables de proyectos aplicados al sector industrial.
 
-## 1. Propósito del repositorio
+## 1. Objetivo
 
-Este repositorio está diseñado para:
+Este repositorio organiza el material del diplomado por etapas de trabajo para que puedas:
 
-- Organizar de forma trazable el material del diplomado por fases de trabajo analítico.
-- Conectar fundamentos de preparación de datos con proyectos aplicados en contexto industrial.
-- Facilitar la reutilización de datasets procesados para análisis descriptivo, modelado y validación de resultados.
-- Servir como evidencia técnica y documental del avance de cada proyecto.
+- Ubicar rapidamente datos crudos, datos procesados y documentacion;
+- reutilizar datasets en notebooks y ejercicios de modelado;
+- consultar el contexto tecnico de cada proyecto integrador;
+- desplegar entornos de visualizacion con InfluxDB + Grafana (local o cloud).
 
-En términos prácticos, aquí conviven dos tipos de activos:
-
-- Activos de datos: archivos CSV y XLSX para análisis cuantitativo.
-- Activos de soporte: fichas, entregas y documentación metodológica en PDF/DOCX.
-
-## 2. Audiencia y cómo aprovecharlo
-
-Este repositorio es útil para:
-
-- Estudiantes del diplomado que necesitan una guía clara de dónde está cada material.
-- Docentes o tutores que requieren revisar entregables por proyecto.
-- Profesionales industriales que desean replicar ejercicios de analítica aplicada.
-
-Ruta sugerida de lectura:
-
-1. Revisar módulos de entendimiento y preprocesamiento.
-2. Avanzar a proyectos integradores por caso de uso.
-3. Consultar documentación de cada proyecto para interpretar contexto, alcance y criterios.
-
-## 3. Estructura general del repositorio (índice jerárquico)
+## 2. Estructura actual del repositorio
 
 ```text
 Datasets-for-Notebooks/
-├── gitignore
+├── README.md
+├── DASHBOARDS/
+│   ├── ENTORNO EN CLOUD/
+│   │   ├── README.md
+│   │   ├── config.yml
+│   │   ├── requirements.txt
+│   │   ├── setup.bat
+│   │   └── upload_csv.py
+│   ├── ENTORNO LOCAL/
+│   │   ├── README.md
+│   │   ├── config.yml
+│   │   ├── docker-compose.yml
+│   │   ├── requirements.txt
+│   │   ├── setup.bat
+│   │   ├── start.bat
+│   │   ├── stop.bat
+│   │   ├── upload_csv.py
+│   │   └── grafana/provisioning/datasources/influxdb.yml
+│   └── IMAGENES/
+├── DATASETS CRUDOS - PRACTICA/
+│   ├── Desfibradora_crudo.csv
+│   └── Desfibradora_rejilla_temporal.csv
 ├── PREPROCESING - ROTORKIT/
-│   ├── Notebooks Preprocesing.pdf
 │   ├── Rotorkit.csv
 │   └── Variables_proceso.csv
-├── UNDERSTANDING - DESFIBRADORA Y PICADORA/
-│   ├── DATOS_DESFIBRADORA_CLEANED.csv
-│   ├── DATOS_PICADORA_CLEANED.csv
-│   └── Notebooks Preprocesing.pdf
-└── PROYECTO INTEGRADOR UTP/
-    ├── Proyecto 1. Cuantificación de Desempeño — Desfibradora de Caña/
-    │   ├── DATA/
-    │   │   ├── Data_desf_processed.csv
-    │   │   ├── Data_desf_processed_2.csv
-    │   │   └── Pesos Ponderados - Proyecto1.xlsx
-    │   └── DOCUMENTATION/
-    │       ├── Entrega_Dataset_Proyecto1.docx
-    │       ├── Entrega_Dataset_Proyecto1.pdf
-    │       └── Proyecto 1 - Ficha.pdf
-    ├── Proyecto 2. Cuantificación de Desempeño — Turbogenerador de Vapor/
-    │   ├── DATA/
-    │   │   ├── Data_turbine_processed.csv
-    │   │   ├── Data_turbine_processed_2.csv
-    │   │   └── Pesos Ponderados - Proyecto2.xlsx
-    │   └── DOCUMENTATION/
-    │       ├── Entrega_Dataset_Proyecto2.docx
-    │       ├── Entrega_Dataset_Proyecto2.pdf
-    │       └── Proyecto 2 - Ficha.pdf
-    ├── Proyecto 4. Machine Learning para Clasificación — BPC  Estación de Bombeo/
-    │   ├── DATA/
-    │   │   ├── Data_BPC_processed.csv
-    │   │   ├── Entrega_Dataset_Proyecto4.docx
-    │   │   └── Pesos Ponderados - Proyecto4.xlsx
-    │   └── DOCUMENTATION/
-    │       ├── Entrega_Dataset_Proyecto4.pdf
-    │       └── Proyecto 4 - Ficha.pdf
-    ├── Proyecto 5. Detección de Anomalías — BPC Estación de Bombeo/
-    │   ├── DATA/
-    │   │   ├── Data_BPC_processed.csv
-    │   │   └── Pesos Ponderados - Proyecto5.xlsx
-    │   └── DOCUMENTATION/
-    │       ├── Entrega_Dataset_Proyecto5.docx
-    │       ├── Entrega_Dataset_Proyecto5.pdf
-    │       └── Proyecto 5 - Ficha.pdf
-    └── Proyecto 6. Clustering de Modos de Consumo Energético/
-        ├── DATA/
-        │   ├── Data_EBR_processed.csv
-        │   └── Pesos Ponderados - Proyecto6.xlsx
-        └── DOCUMENTATION/
-            ├── Entrega_Dataset_Proyecto6.docx
-            ├── Entrega_Dataset_Proyecto6.pdf
-            └── Proyecto 6 - Ficha.pdf
+├── PROYECTO INTEGRADOR UTP/
+│   ├── Proyecto 1. Cuantificacion de Desempeno - Desfibradora de Cana/
+│   │   ├── DATA/
+│   │   └── DOCUMENTATION/
+│   ├── Proyecto 2. Cuantificacion de Desempeno - Turbogenerador de Vapor/
+│   │   ├── DATA/
+│   │   └── DOCUMENTATION/
+│   ├── Proyecto 4. Machine Learning para Clasificacion - BPC Estacion de Bombeo/
+│   │   ├── DATA/
+│   │   └── DOCUMENTATION/
+│   ├── Proyecto 5. Deteccion de Anomalias - BPC Estacion de Bombeo/
+│   │   ├── DATA/
+│   │   └── DOCUMENTATION/
+│   └── Proyecto 6. Clustering de Modos de Consumo Energetico/
+│       ├── DATA/
+│       └── DOCUMENTATION/
+└── UNDERSTANDING - DESFIBRADORA Y PICADORA/
+    ├── DATOS_DESFIBRADORA_CLEANED.csv
+    └── DATOS_PICADORA_CLEANED.csv
 ```
 
-## 4. ¿Qué contiene cada módulo y por qué existe?
+## 3. Descripcion rapida por modulo
 
-### 4.1 PREPROCESING - ROTORKIT
+- DASHBOARDS: paquetes para cargar CSV a InfluxDB y visualizar en Grafana.
+  - ENTORNO LOCAL: stack local con Docker (InfluxDB + Grafana).
+  - ENTORNO EN CLOUD: carga a InfluxDB Cloud y visualizacion en Grafana Cloud.
+- DATASETS CRUDOS - PRACTICA: datos fuente sin procesar para ejercicios de limpieza y transformacion.
+- UNDERSTANDING - DESFIBRADORA Y PICADORA: datasets limpios para fase de entendimiento.
+- PREPROCESING - ROTORKIT: datos y variables de referencia para preprocesamiento.
+- PROYECTO INTEGRADOR UTP: casos aplicados por proyecto, con separacion entre datos y documentacion.
 
-Propósito:
+## 4. Ruta de uso recomendada
 
-- Consolidar insumos de preprocesamiento para el entorno Rotorkit.
-- Definir variables de proceso y base de datos inicial para estandarizar etapas posteriores.
+1. Comenzar con DATASETS CRUDOS - PRACTICA para entender el origen del dato.
+2. Continuar con UNDERSTANDING y PREPROCESING para trabajar limpieza y variables.
+3. Revisar PROYECTO INTEGRADOR UTP para analitica aplicada por caso de uso.
+4. Si quieres tableros operativos, usar DASHBOARDS (local o cloud).
 
-Contenido típico del módulo:
-
-- `Rotorkit.csv`: dataset base del proceso.
-- `Variables_proceso.csv`: diccionario o lista de variables de interés operativo.
-- `Notebooks Preprocesing.pdf`: soporte metodológico del tratamiento de datos.
-
-Relación con otros módulos:
-
-- Alimenta las decisiones de limpieza y selección de variables en proyectos integradores.
-- Sirve como referencia para asegurar consistencia entre casos.
-
-### 4.2 UNDERSTANDING - DESFIBRADORA Y PICADORA
-
-Propósito:
-
-- Fase de entendimiento de datos para dos equipos industriales (desfibradora y picadora).
-- Proveer versiones limpias listas para análisis exploratorio y modelado.
-
-Contenido del módulo:
-
-- `DATOS_DESFIBRADORA_CLEANED.csv`.
-- `DATOS_PICADORA_CLEANED.csv`.
-- Documento de preprocesamiento para trazabilidad.
-
-Relación con otros módulos:
-
-- Funciona como puente entre diagnóstico inicial y proyectos de cuantificación de desempeño.
-
-### 4.3 PROYECTO INTEGRADOR UTP
-
-Propósito:
-
-- Reunir los casos aplicados del diplomado con estructura uniforme por proyecto.
-- Separar datos (`DATA`) de soporte técnico (`DOCUMENTATION`) para facilitar revisión.
-
-Patrón estructural por proyecto:
-
-- `DATA`: datasets procesados y archivos auxiliares de ponderación.
-- `DOCUMENTATION`: fichas de proyecto y entregables narrativos.
-
-Interpretación de la secuencia de proyectos:
-
-- Proyecto 1 y 2: cuantificación de desempeño (métrica operativa y evaluación comparativa).
-- Proyecto 4: clasificación con machine learning (predicción de clases/estados).
-- Proyecto 5: detección de anomalías (identificación de comportamientos atípicos).
-- Proyecto 6: clustering de consumo energético (segmentación de modos de operación).
-
-## 5. Guía de navegación rápida
+## 5. Guia de navegacion rapida
 
 Si necesitas... usa esta ruta:
 
-- Iniciar el análisis desde datos crudos (fase Understanding): ir a `UNDERSTANDING - DESFIBRADORA Y PICADORA/`.
-- Dejar la data lista para analizar (fase Preprocesing): ir a `PREPROCESING - ROTORKIT/Variables_proceso.csv`.
-- Revisar datos listos para modelado por caso: ir a `PROYECTO INTEGRADOR UTP/<Proyecto>/DATA/`.
-- Consultar objetivos, alcance y entregables: ir a `PROYECTO INTEGRADOR UTP/<Proyecto>/DOCUMENTATION/`.
+- Datos crudos para practicar: DATASETS CRUDOS - PRACTICA/
+- datos limpios de desfibradora y picadora: UNDERSTANDING - DESFIBRADORA Y PICADORA/
+- variables de proceso de Rotorkit: PREPROCESING - ROTORKIT/Variables_proceso.csv
+- datasets finales por proyecto: PROYECTO INTEGRADOR UTP/<Proyecto>/DATA/
+- fichas y entregables: PROYECTO INTEGRADOR UTP/<Proyecto>/DOCUMENTATION/
+- levantar visualizacion local: DASHBOARDS/ENTORNO LOCAL/README.md
+- visualizacion en la nube: DASHBOARDS/ENTORNO EN CLOUD/README.md
 
-Convención útil para orientarte:
+## 6. Convenciones de archivos
 
-- Archivos `Data_*_processed*.csv`: versiones procesadas para análisis.
-- Archivos `Pesos Ponderados - Proyecto*.xlsx`: ponderaciones o criterios de evaluación.
-- Archivos `Proyecto * - Ficha.pdf`: resumen ejecutivo/técnico del caso.
-- Archivos `Entrega_Dataset_Proyecto*`: descripción formal del dataset y su entrega.
+- Data_*_processed*.csv: datasets procesados listos para analisis.
+- Entrega_Dataset_Proyecto*.pdf/.docx: documento de entrega tecnica por proyecto.
+- Proyecto * - Ficha.pdf: resumen ejecutivo y contexto del caso.
+- config.yml: parametros de carga de CSV hacia InfluxDB.
 
-## 6. Cómo usar los recursos de forma práctica
+## 7. Notas importantes
 
-### 6.1 Datasets CSV
+- La carpeta DASHBOARDS contiene scripts y configuracion operativa. Sigue su README interno antes de ejecutar .bat o scripts de carga.
+- Mantener consistencia entre org, bucket y token al usar InfluxDB (especialmente en entorno local).
+- Evitar modificar nombres de columnas de tiempo en CSV sin ajustar config.yml.
 
-Uso recomendado:
+## 8. Contacto
 
-1. Cargar en entorno de análisis.
-2. Validar tipos de datos, nulos y unidades.
-3. Replicar o adaptar el flujo analítico del proyecto.
-
-Ejemplo mínimo en Python:
-
-```python
-import pandas as pd
-
-df = pd.read_csv("PROYECTO INTEGRADOR UTP/Proyecto 2. Cuantificación de Desempeño — Turbogenerador de Vapor/DATA/Data_turbine_processed.csv")
-print(df.head())
-print(df.info())
-```
-
-### 6.2 Archivos XLSX de pesos ponderados
-
-Uso recomendado:
-
-- Interpretar criterios de ponderación para métricas de desempeño.
-- Validar cómo se priorizan variables o indicadores por proyecto.
-- Reproducir cálculos en Python o Excel antes de comparar resultados.
-
-### 6.3 Documentación PDF/DOCX
-
-Uso recomendado:
-
-- Leer primero la ficha de proyecto para entender objetivo, alcance y contexto industrial.
-- Luego contrastar con dataset y ponderaciones para reconstruir la lógica analítica completa.
+Carlos Camacho Castano  
+Analista de Desarrollos Predictivos  
+analyticscbm@idc-confiabilidad.com  
+LinkedIn: https://linkedin.com/in/carlos-camacho-c-111a95286
 
 ---
 
-En caso de dudas, inquietudes o sugerencias, contactar a:
-
-CARLOS CAMACHO CASTAÑO  
-Analista de Desarrollos Predictivos  
-analyticscbm@idc-confiabilidad.com
+Ultima actualizacion: 2026-05-07
