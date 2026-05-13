@@ -73,8 +73,9 @@ Datasets-for-Notebooks/
 
 ## 4. Ruta de uso recomendada
 
-1. Comenzar con DATASETS CRUDOS - PRACTICA para entender el origen del dato.
-2. Continuar con UNDERSTANDING y PREPROCESING para trabajar limpieza y variables.
+
+1. Comenzar con la lectura de los notebooks UNDERSTANDING y PREPROCESING para tener una noción de cómo trabajar variables y su limpieza.
+2. Continuar con DATASETS CRUDOS - PRACTICA para aplicar la teoría aprendida.
 3. Revisar PROYECTO INTEGRADOR UTP para analitica aplicada por caso de uso.
 4. Si quieres tableros operativos, usar DASHBOARDS (local o cloud).
 
