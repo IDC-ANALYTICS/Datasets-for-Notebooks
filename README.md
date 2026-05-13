@@ -37,6 +37,7 @@ Datasets-for-Notebooks/
 ├── DATASETS CRUDOS - PRACTICA/
 │   ├── Desfibradora_crudo.csv
 │   └── Desfibradora_rejilla_temporal.csv
+│   └── Turbogenerador_crudo.csv.csv
 ├── PREPROCESING - ROTORKIT/
 │   ├── Rotorkit.csv
 │   └── Variables_proceso.csv
